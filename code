@@ -1,0 +1,168 @@
+clc; clear; close all;
+%% Set random seed for reproducibility
+rng('default');
+%% Step 1: Create Port Nodes and Distance Matrix with Fixed Coordinates
+numPorts = 10;
+% Fixed port locations (X, Y coordinates)
+portLocations = [
+ 10, 20;
+ 5, 80;
+ 40, 50;
+ 50, 50;
+ 70, 90;
+ 85, 60;
+ 20, 40;
+ 35, 70;
+ 50, 10;
+ 85, 15;
+];
+% Initialize distance matrix
+distanceMatrix = zeros(numPorts, numPorts);
+54
+% Compute the Euclidean distance between each pair of ports
+for i = 1:numPorts
+ for j = 1:numPorts
+ distanceMatrix(i, j) = sqrt((portLocations(i, 1) - portLocations(j, 1))^2 + ...
+ (portLocations(i, 2) - portLocations(j, 2))^2);
+ end
+end
+% Plot the port network
+figure;
+gplot(distanceMatrix < 50, portLocations, '-o');
+hold on;
+scatter(portLocations(:,1), portLocations(:,2), 100, 'filled');
+title('Port Network');
+xlabel('X Coordinate');
+ylabel('Y Coordinate');
+grid on;
+%% Genetic Algorithm (GA) Parameters
+populationSize_GA = 50;
+numGenerations_GA = 10;
+mutationRate_GA = 0.1;
+crossoverRate_GA = 0.5;
+%% Micro Genetic Algorithm (µGA) Parameters
+populationSize_mGA = 50;
+numGenerations_mGA = 10;
+55
+mutationRate_mGA = 0.1;
+crossoverRate_mGA = 0.5;
+%% Initialize Populations
+population_GA = zeros(populationSize_GA, numPorts);
+population_mGA = zeros(populationSize_mGA, numPorts);
+for i = 1:populationSize_GA
+ population_GA(i, :) = randperm(numPorts);
+end
+for i = 1:populationSize_mGA
+ population_mGA(i, :) = randperm(numPorts);
+end
+%% Fitness Function
+fitnessFunction = @(route) sum(diag(distanceMatrix(route, [route(2:end) route(1)])));
+%% Genetic Algorithm (GA)
+for gen = 1:numGenerations_GA
+ fitness_GA = 1 ./ arrayfun(@(i) fitnessFunction(population_GA(i, :)), 
+1:populationSize_GA);
+ cumulativeFitness = cumsum(fitness_GA / sum(fitness_GA));
+ newPopulation = zeros(size(population_GA));
+  % Selection (Roulette Wheel)
+ for i = 1:populationSize_GA
+ r = rand;
+ selectedIdx = find(cumulativeFitness >= r, 1);
+56
+ newPopulation(i, :) = population_GA(selectedIdx, :);
+ end
+  % Crossover (Partially Mapped Crossover)
+ for i = 1:2:populationSize_GA-1
+ if rand < crossoverRate_GA
+ crossoverPoints = sort(randperm(numPorts-1, 2));
+ parent1 = newPopulation(i, :);
+ parent2 = newPopulation(i+1, :);
+ [child1, child2] = pmxCrossover(parent1, parent2, crossoverPoints);
+ newPopulation(i, :) = child1;
+ newPopulation(i+1, :) = child2;
+ end
+ end
+  % Mutation (Swap Mutation)
+ for i = 1:populationSize_GA
+ if rand < mutationRate_GA
+ swapIdx = randperm(numPorts, 2);
+ newPopulation(i, swapIdx) = newPopulation(i, fliplr(swapIdx));
+ end
+ end
+  population_GA = newPopulation;
+end
+%% Micro Genetic Algorithm (µGA)
+57
+for gen = 1:numGenerations_mGA
+ fitness_mGA = arrayfun(@(i) fitnessFunction(population_mGA(i, :)), 
+1:populationSize_mGA);
+ newPopulation = zeros(size(population_mGA));
+  % Selection (Tournament Selection)
+ for i = 1:populationSize_mGA
+ candidates = randperm(populationSize_mGA, 3);
+ [~, bestIdx] = min(fitness_mGA(candidates));
+ newPopulation(i, :) = population_mGA(candidates(bestIdx), :);
+ end
+  % Crossover (Order Crossover)
+ for i = 1:2:populationSize_mGA-1
+ if rand < crossoverRate_mGA
+ crossoverPoints = sort(randperm(numPorts-1, 2));
+ parent1 = newPopulation(i, :);
+ parent2 = newPopulation(i+1, :);
+ child1 = orderCrossover(parent1, parent2, crossoverPoints);
+ child2 = orderCrossover(parent2, parent1, crossoverPoints);
+ newPopulation(i, :) = child1;
+ newPopulation(i+1, :) = child2;
+ end
+ end
+ % Mutation (Swap Mutation)
+ for i = 1:populationSize_mGA
+58
+ if rand < mutationRate_mGA
+ swapIdx = randperm(numPorts, 2);
+ newPopulation(i, swapIdx) = newPopulation(i, fliplr(swapIdx));
+ end
+ end
+ population_mGA = newPopulation;
+end
+%% Performance Metrics
+bestRoute_GA = population_GA(1, :);
+bestRoute_mGA = population_mGA(1, :);
+totalDistance_GA = fitnessFunction(bestRoute_GA);
+totalDistance_mGA = fitnessFunction(bestRoute_mGA);
+timeDelay_GA = totalDistance_GA / 10;
+timeDelay_mGA = totalDistance_mGA / 10;
+efficiency_GA = (100 / (1 + totalDistance_GA)) * 100;
+efficiency_mGA = (100 / (1 + totalDistance_mGA)) * 100;
+latency_GA = timeDelay_GA * 0.8;
+latency_mGA = timeDelay_mGA * 0.8;
+throughput_GA = 1 / latency_GA;
+throughput_mGA = 1 / latency_mGA;
+59
+%% Latency vs. Number of Ports
+ports = 1:numPorts;
+% Corrected latency computation
+for port = 1:numPorts
+ latency_values_GA(port) = timeDelay_GA * 0.8;
+ efficiency_values_GA(port) = (100 / (1 + totalDistance_GA - port * 0.5)) * 100;
+end
+for port = 1:numPorts
+ latency_values_mGA(port) = timeDelay_mGA * 0.8;
+ efficiency_values_mGA(port) = (100 / (1 + totalDistance_mGA - port * 0.5)) * 100;
+end
+%% Crossover Functions
+function [child1, child2] = pmxCrossover(parent1, parent2, crossoverPoints)
+ child1 = parent1;
+ child2 = parent2;
+ child1(crossoverPoints(1):crossoverPoints(2)) = 
+parent2(crossoverPoints(1):crossoverPoints(2));
+ child2(crossoverPoints(1):crossoverPoints(2)) = 
+parent1(crossoverPoints(1):crossoverPoints(2));
+end
+function child = orderCrossover(parent1, parent2, crossoverPoints)
+ child = zeros(size(parent1));
+60
+ child(crossoverPoints(1):crossoverPoints(2)) = 
+parent1(crossoverPoints(1):crossoverPoints(2));
+ remainingGenes = setdiff(parent2, child(child > 0), 'stable');
+ child(child == 0) = remainingGenes;
+end
